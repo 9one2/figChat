@@ -1,0 +1,19 @@
+{
+  "name": "figRandomChat",
+  "id": "1457045351889106584",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": [
+    "figma"
+  ],
+  "networkAccess": {
+    "allowedDomains": [
+      "https://xpcihvmlbnfxsfnwfvta.supabase.co",
+      "https://*.supabase.co"
+    ]
+  },
+  "permissions": [
+    "currentuser"
+  ]
+}
