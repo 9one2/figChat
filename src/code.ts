@@ -6,8 +6,8 @@ console.log('플러그인 코드 시작...');
 
 // 기본 설정
 figma.showUI(__html__, {
-  width: 350,
-  height: 500,
+  width: 800,
+  height: 600,
   themeColors: true
 });
 

@@ -65,34 +65,26 @@ function ensureMessagesContainer() {
 
 // 메시지 표시 함수 개선
 function displayMessages(messages: Message[] | Message[][]) {
-    const messagesContainer = ensureMessagesContainer();
-    if (!messagesContainer) return;
+    const messagesContainer = document.querySelector('.messages-container');
+    if (!messagesContainer || !currentChatRoom) return;
 
     const normalizedMessages = Array.isArray(messages[0]) ? messages[0] as Message[] : messages as Message[];
     
-    console.log('표시할 메시지:', normalizedMessages);
+    // 현재 채팅방 메시지만 필터링
+    const roomMessages = normalizedMessages.filter(msg => 
+        msg.chat_room_id === currentChatRoom?.id
+    );
 
-    normalizedMessages.forEach((message: Message) => {
-        if (!message) return;
-        
+    roomMessages.forEach(message => {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${message.user_id === currentUserId ? 'sent' : 'received'}`;
         
         const userName = message.user_id === currentUserId ? '나' : `사용자 ${message.user_id.slice(0, 4)}`;
         
-        const formatTime = (timestamp: string) => {
-            const date = new Date(timestamp);
-            return date.toLocaleString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        };
-
         messageElement.innerHTML = `
             <div class="message-header">
                 <span class="user-name">${userName}</span>
-                <span class="time">${message.created_at ? formatTime(message.created_at) : '방금 전'}</span>
+                <span class="time">${formatTime(message.created_at || '')}</span>
             </div>
             <div class="content">${message.content}</div>
         `;
@@ -100,7 +92,7 @@ function displayMessages(messages: Message[] | Message[][]) {
         messagesContainer.appendChild(messageElement);
     });
 
-    // 스크롤을 최하단으로 이동
+    // 스크롤을 최하단으로
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
@@ -209,83 +201,41 @@ async function loadMessages(roomId?: string) {
 
 // 초기화 함수
 async function initializeApp() {
-    try {
-        updateStatus('앱 초기화 시작...');
-        
-        // 유저 ID 요청
-        parent.postMessage({
-            pluginMessage: {
-                type: 'get-user-id'
-            }
-        }, '*');
-        
-        // 임시 사용자 ID 생성 (테스트용)
-        currentUserId = '11111111-1111-1111-1111-111111111111'; // 테스트 사용자 ID
-        
-        // 채팅방 이벤트 리스너 설정
-        setupChatRoomEvents();
-        
-        // 응답 리스너 설정
-        window.onmessage = async (event) => {
-            const msg = event.data.pluginMessage;
-            if (!msg) return;
+    console.log('UI 초기화 시작');
+    
+    // 메시지 이벤트 핸들러 설정
+    window.onmessage = async (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
 
-            console.log('UI가 플러그인으로부터 메시지 수신:', msg);
+        console.log('UI가 플러그인으로부터 메시지 수신:', msg);
 
-            switch (msg.type) {
-                case 'supabase-response':
-                    if (msg.action === 'getChatRooms' && msg.result.data) {
-                        console.log('채팅방 목록 수신:', msg.result.data);
-                        displayChatRooms(msg.result.data);
-                        
-                        // 채팅방 클릭 이벤트 리스너 추가
-                        const chatRooms = document.querySelectorAll('.chat-room-item');
-                        chatRooms.forEach(room => {
-                            room.addEventListener('click', (e) => {
-                                const roomId = (e.currentTarget as HTMLElement).dataset.roomId;
-                                if (roomId) {
-                                    currentChatRoom = msg.result.data.find((r: ChatRoom) => r.id === roomId);
-                                    if (currentChatRoom) {
-                                        loadMessages(roomId);
-                                        subscribeToMessages();
-                                    }
-                                }
-                            });
-                        });
-                    }
-                    break;
+        switch (msg.type) {
+            case 'plugin-ready':
+                updateStatus('플러그인 준비 완료');
+                currentUserId = msg.userId;
+                // 플러그인 준비되면 채팅방 목록 로드
+                loadChatRooms();
+                break;
+                
+            case 'supabase-response':
+                if (msg.action === 'getChatRooms' && msg.result.data) {
+                    console.log('채팅방 목록 수신:', msg.result.data);
+                    displayChatRooms(msg.result.data);
+                }
+                break;
 
-                case 'new-messages':
-                    if (msg.messages) {
-                        displayMessages(msg.messages);
-                    }
-                    break;
+            case 'new-messages':
+                if (msg.messages) {
+                    displayMessages(msg.messages);
+                }
+                break;
 
-                case 'error':
-                    updateStatus(msg.error, true);
-                    break;
-
-                case 'set-user-id':
-                    currentUserId = msg.userId;
-                    break;
-            }
-        };
-
-        // 채팅방 목록 요청
-        parent.postMessage({
-            pluginMessage: {
-                type: 'supabase-request',
-                action: 'getChatRooms',
-                table: 'chatRooms',
-                method: 'GET'
-            }
-        }, '*');
-
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
-        updateStatus('오류: ' + errorMessage, true);
-        console.error('초기화 오류:', error);
-    }
+            case 'error':
+                updateStatus(msg.error, true);
+                break;
+        }
+    };
 }
 
 // UI 이벤트 설정
@@ -293,29 +243,44 @@ function setupUIEvents() {
     const messageInput = document.getElementById('messageInput') as HTMLInputElement;
     const sendButton = document.getElementById('sendButton');
 
-    if (!messageInput || !sendButton) {
-        console.error('채팅 UI 요소를 찾을 수 없습니다.');
-        return;
+    if (messageInput && sendButton) {
+        const handleSendMessage = () => {
+            const content = messageInput.value.trim();
+            if (content && currentChatRoom && currentUserId) {
+                console.log('메시지 전송 시도:', {
+                    roomId: currentChatRoom.id,
+                    content,
+                    userId: currentUserId
+                });
+                
+                parent.postMessage({
+                    pluginMessage: {
+                        type: 'send-message',
+                        roomId: currentChatRoom.id,
+                        content: content,
+                        userId: currentUserId
+                    }
+                }, '*');
+                
+                messageInput.value = '';
+            } else {
+                console.error('메시지 전송 실패:', {
+                    content: !!content,
+                    currentChatRoom: !!currentChatRoom,
+                    currentUserId: !!currentUserId
+                });
+            }
+        };
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        sendButton.addEventListener('click', handleSendMessage);
     }
-
-    console.log('UI 이벤트 설정');
-
-    sendButton.onclick = () => {
-        const content = messageInput.value.trim();
-        if (content) {
-            console.log('전송 버튼 클릭:', content);
-            sendMessage(content);
-            messageInput.value = '';
-            messageInput.focus();
-        }
-    };
-
-    messageInput.onkeypress = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendButton.click();
-        }
-    };
 }
 
 // UI 스타일 추가
@@ -435,16 +400,12 @@ style.textContent += `
     }
 `;
 
-// DOM이 완전히 로드된 후 초기화 실행
+// DOM 로드 시 초기화 실행
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM 로드됨');
-    // 약간의 지연을 주어 iframe이 완전히 초기화되도록 함
-    setTimeout(() => {
-        console.log('초기화 시작');
-        initializeApp().catch(error => {
-            console.error('초기화 중 오류 발생:', error);
-        });
-    }, 100);
+    initializeApp().catch(error => {
+        console.error('초기화 중 오류 발생:', error);
+    });
 });
 
 // window onload 이벤트도 바인딩
@@ -472,35 +433,28 @@ function setupChatRoomEvents() {
 
 // 채팅방 참여 함수
 async function joinChatRoom(roomId: string) {
-    console.log('채팅방 참여 시도:', roomId);
+    console.log('채팅방 참여:', roomId);
+    
+    const messageList = document.getElementById('messageList');
+    if (!messageList) return;
+
+    // 현재 채팅방 정보 업데이트
     currentChatRoom = { id: roomId } as ChatRoom;
     
-    // UI 업데이트
-    const messageList = document.getElementById('messageList');
-    if (messageList) {
-        messageList.innerHTML = `
-            <div class="chat-room-header">채팅방 #${roomId}</div>
-            <div class="messages-container" id="messagesContainer"></div>
-            <div class="chat-input-container">
-                <input type="text" id="messageInput" placeholder="메시지를 입력하세요..." />
-                <button id="sendButton">전송</button>
-            </div>
-        `;
-        
-        // 채팅 입력 이벤트 설정
-        setupUIEvents();
-        
-        // 메시지 로드 요청
-        parent.postMessage({
-            pluginMessage: {
-                type: 'supabase-request',
-                action: 'loadMessages',
-                params: {
-                    chat_room_id: roomId
-                }
-            }
-        }, '*');
-    }
+    // 메시지 영역 초기화
+    messageList.innerHTML = `
+        <div class="chat-room-header">채팅방 #${roomId}</div>
+        <div class="messages-container"></div>
+    `;
+
+    // UI 이벤트 재설정
+    setupUIEvents();
+    
+    // 메시지 로드
+    await loadMessages(roomId);
+    
+    // 실시간 구독 설정
+    subscribeToMessages();
 }
 
 // 실시간 메시지 구독 설정
@@ -517,18 +471,22 @@ function setupRealtimeSubscription(roomId: string) {
 
 // 채팅방 목록 표시 함수 추가
 function displayChatRooms(rooms: ChatRoom[]) {
-    const messageList = document.getElementById('messageList');
-    if (!messageList) return;
+    const chatRoomsList = document.getElementById('chatRoomsList');
+    if (!chatRoomsList) {
+        console.error('chatRoomsList element not found');
+        return;
+    }
 
     console.log('채팅방 목록 표시 시도:', rooms);
 
-    messageList.innerHTML = `
+    // 채팅방 목록 HTML 생성
+    chatRoomsList.innerHTML = `
+        <h3>채팅방 목록</h3>
         <div class="chat-rooms">
-            <h3>채팅방 목록</h3>
             ${rooms.map(room => `
-                <div class="chat-room-item" data-room-id="${room.id}" style="cursor: pointer; padding: 10px; margin: 5px; border: 1px solid #ccc; border-radius: 4px;">
-                    <div class="room-name" style="font-weight: bold;">${room.name}</div>
-                    <div class="room-info" style="font-size: 0.8em; color: #666;">
+                <div class="chat-room-item" data-room-id="${room.id}">
+                    <div class="room-name">${room.name || 'Unnamed Room'}</div>
+                    <div class="room-info">
                         생성: ${room.created_at ? new Date(room.created_at).toLocaleString() : '날짜 없음'}
                     </div>
                 </div>
@@ -537,21 +495,17 @@ function displayChatRooms(rooms: ChatRoom[]) {
     `;
 
     // 채팅방 클릭 이벤트 리스너 추가
-    const chatRoomElements = messageList.querySelectorAll('.chat-room-item');
+    const chatRoomElements = chatRoomsList.querySelectorAll('.chat-room-item');
     chatRoomElements.forEach(element => {
         element.addEventListener('click', (e) => {
             const roomId = (e.currentTarget as HTMLElement).dataset.roomId;
             if (roomId) {
-                const selectedRoom = rooms.find(room => room.id === roomId);
-                if (selectedRoom) {
-                    currentChatRoom = selectedRoom;
-                    loadMessages(roomId);
-                    subscribeToMessages();
-                    
-                    // 선택된 채팅방 스타일 변경
-                    chatRoomElements.forEach(el => el.classList.remove('selected'));
-                    element.classList.add('selected');
-                }
+                // 이전 선택 제거
+                chatRoomElements.forEach(el => el.classList.remove('selected'));
+                // 현재 선택 표시
+                element.classList.add('selected');
+                // 채팅방 참여
+                joinChatRoom(roomId);
             }
         });
     });
@@ -571,4 +525,15 @@ async function loadChatRooms() {
 initializeApp().then(() => {
     loadChatRooms();
 });
+
+// 시간 포맷팅 함수 추가
+function formatTime(timestamp: string): string {
+    if (!timestamp) return '방금 전';
+    const date = new Date(timestamp);
+    return date.toLocaleString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+}
 
