@@ -328,6 +328,11 @@ figma.ui.onmessage = async (msg) => {
                 if (response.error) {
                     throw new Error(response.error);
                 }
+                // 메시지 전송 성공 시 UI에 알림
+                figma.ui.postMessage({
+                    type: 'new-messages',
+                    messages: [response.data[0]]  // 새로 생성된 메시지를 UI에 전달
+                });
             } catch (error) {
                 console.error('메시지 전송 실패:', error);
                 figma.ui.postMessage({

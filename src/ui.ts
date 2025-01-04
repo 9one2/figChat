@@ -49,44 +49,59 @@ function updateStatus(message: string, isError = false) {
     }
 }
 
-// 메시지 표시 함수
-async function displayMessage(message: Message) {
-    const messageList = document.getElementById('messageList');
-    if (!messageList || !currentUserId) return;
-
-    // 사용자 정보 가져오기 - 메인 스레드를 통해 요청
-    parent.postMessage({
-        pluginMessage: {
-            type: 'supabase-request',
-            action: 'getUser',
-            table: 'users',
-            method: 'GET',
-            params: { id: message.user_id }
+// messages-container 요소가 있는지 확인하고 없으면 생성
+function ensureMessagesContainer() {
+    let messagesContainer = document.querySelector('.messages-container');
+    if (!messagesContainer) {
+        messagesContainer = document.createElement('div');
+        messagesContainer.className = 'messages-container';
+        const messageList = document.getElementById('messageList');
+        if (messageList) {
+            messageList.appendChild(messagesContainer);
         }
-    }, '*');
-
-    const messageElement = document.createElement('div');
-    messageElement.className = `message ${message.user_id === currentUserId ? 'sent' : 'received'}`;
-    
-    const nicknameSpan = document.createElement('span');
-    nicknameSpan.className = 'nickname';
-    nicknameSpan.textContent = '알 수 없음';
-    
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'content';
-    contentDiv.textContent = message.content;
-
-    if (message.image_url) {
-        const imageElement = document.createElement('img');
-        imageElement.src = message.image_url;
-        imageElement.className = 'message-image';
-        contentDiv.appendChild(imageElement);
     }
+    return messagesContainer;
+}
 
-    messageElement.appendChild(nicknameSpan);
-    messageElement.appendChild(contentDiv);
-    messageList.appendChild(messageElement);
-    messageList.scrollTop = messageList.scrollHeight;
+// 메시지 표시 함수 개선
+function displayMessages(messages: Message[] | Message[][]) {
+    const messagesContainer = ensureMessagesContainer();
+    if (!messagesContainer) return;
+
+    const normalizedMessages = Array.isArray(messages[0]) ? messages[0] as Message[] : messages as Message[];
+    
+    console.log('표시할 메시지:', normalizedMessages);
+
+    normalizedMessages.forEach((message: Message) => {
+        if (!message) return;
+        
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${message.user_id === currentUserId ? 'sent' : 'received'}`;
+        
+        const userName = message.user_id === currentUserId ? '나' : `사용자 ${message.user_id.slice(0, 4)}`;
+        
+        const formatTime = (timestamp: string) => {
+            const date = new Date(timestamp);
+            return date.toLocaleString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        };
+
+        messageElement.innerHTML = `
+            <div class="message-header">
+                <span class="user-name">${userName}</span>
+                <span class="time">${message.created_at ? formatTime(message.created_at) : '방금 전'}</span>
+            </div>
+            <div class="content">${message.content}</div>
+        `;
+        
+        messagesContainer.appendChild(messageElement);
+    });
+
+    // 스크롤을 최하단으로 이동
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 // 사용자 생성 함수
@@ -242,6 +257,7 @@ async function initializeApp() {
 
                 case 'new-messages':
                     if (msg.messages) {
+                        console.log('새 메시지 수신:', msg.messages);
                         displayMessages(msg.messages);
                     }
                     break;
@@ -498,47 +514,6 @@ function setupRealtimeSubscription(roomId: string) {
             params: { chatRoomId: roomId }
         }
     }, '*');
-}
-
-// 메시지 목록 표시 함수
-function displayMessages(messages: Message[] | Message[][]) {
-    const messagesContainer = document.querySelector('.messages-container');
-    if (!messagesContainer) return;
-
-    const normalizedMessages = Array.isArray(messages[0]) ? messages[0] as Message[] : messages as Message[];
-
-    normalizedMessages.forEach((message: Message) => {
-        if (!message) return;
-        
-        const messageElement = document.createElement('div');
-        messageElement.className = `message ${message.user_id === currentUserId ? 'sent' : 'received'}`;
-        
-        // 메시지 작성자 표시 수정
-        const userName = message.user_id === currentUserId ? '나' : `사용자 ${message.user_id.slice(5, 9)}`;
-        
-        // 시간 포맷팅 함수
-        const formatTime = (timestamp: string) => {
-            const date = new Date(timestamp);
-            return date.toLocaleString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        };
-
-        messageElement.innerHTML = `
-            <div class="message-header">
-                <span class="user-name">${userName}</span>
-                <span class="time">${message.created_at ? formatTime(message.created_at) : '방금 전'}</span>
-            </div>
-            <div class="content">${message.content}</div>
-        `;
-        
-        messagesContainer.appendChild(messageElement);
-    });
-
-    // 스크롤을 최하단으로 이동
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 // 채팅방 목록 표시 함수 추가
