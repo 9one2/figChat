@@ -9,9 +9,9 @@
     "build:prod": "webpack --mode=production"
   },
   "author": "",
-  "license": "",
+  "license": "ISC",
   "devDependencies": {
-    "@figma/plugin-typings": "*",
+    "@figma/plugin-typings": "^1.106.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^20.11.30",
@@ -19,7 +19,7 @@
     "raw-loader": "^4.0.2",
     "react-dev-utils": "^12.0.1",
     "ts-loader": "^9.5.1",
-    "typescript": "^5.4.2",
+    "typescript": "^5.7.2",
     "webpack": "^5.90.3",
     "webpack-cli": "^5.1.4"
   },
@@ -27,5 +27,6 @@
     "@supabase/supabase-js": "^2.47.10",
     "cors": "^2.8.5",
     "express": "^4.21.2"
-  }
+  },
+  "keywords": []
 }
