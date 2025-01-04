@@ -257,7 +257,6 @@ async function initializeApp() {
 
                 case 'new-messages':
                     if (msg.messages) {
-                        console.log('새 메시지 수신:', msg.messages);
                         displayMessages(msg.messages);
                     }
                     break;
